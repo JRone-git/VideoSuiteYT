@@ -1,0 +1,68 @@
+# YSS Project File Schema
+# Format: YAML + ZIP container (.yss extension)
+
+version: "1.0"
+name: "project_name"
+description: "Short video project description"
+created_at: "2024-01-15T10:30:00Z"
+last_modified: "2024-01-15T10:30:00Z"
+duration_seconds: 45
+target_platform: "youtube-shots"
+
+# Project assets
+assets:
+  scripts:
+    - path: "assets/scripts/main_script.json"
+      version: "1.0"
+      source: "ollama"
+    - path: "assets/scripts/refined_script.json"
+      version: "2.0"
+      source: "ollama"
+  
+  audio:
+    - path: "assets/audio/voiceover.wav"
+      type: "voiceover"
+      duration: 45.0
+      loudness: -16.0
+    - path: "assets/audio/background_music.mp3"
+      type: "background"
+      duration: 60.0
+      loudness: -23.0
+  
+  video:
+    - path: "assets/video/main_clips/"
+      type: "video_clips"
+      clips:
+        - path: "clip1.mp4"
+          duration: 10.0
+          start_time: 0.0
+        - path: "clip2.mp4"
+          duration: 15.0
+          start_time: 10.0
+  
+  captions:
+    - path: "assets/captions/subtitles.srt"
+      type: "srt"
+      language: "en"
+      generated_by: "whisper"
+      model_size: "small"
+
+# Timeline configuration
+timeline:
+  resolution: "1080x1920"
+  fps: 30
+  aspect_ratio: "9:16"
+  
+# AI settings
+ai_settings:
+  llm_model: "llama3.1:8b-q4_K_M"
+  whisper_model: "small"
+  tts_engine: "orpheus"
+  voice_clone_enabled: false
+
+# Export settings
+export_settings:
+  output_format: "mp4"
+  codec: "h.264"
+  bitrate: "8M"
+  audio_bitrate: "192k"
