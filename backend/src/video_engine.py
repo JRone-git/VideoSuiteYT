@@ -154,7 +154,7 @@ class VideoEngine:
             "-profile:v", "main",
             "-level", "4.2",
             "-movflags", "+faststart",
-            "output.mp4"  # Temporary output, we'll rename
+            "output.mp4"
         ])
         
         return cmd
@@ -162,7 +162,6 @@ class VideoEngine:
     def _check_nvenc(self) -> bool:
         """Check if NVIDIA encoder (NVENC) is available"""
         try:
-            # Check if NVIDIA drivers are available
             result = subprocess.run(
                 ["ffmpeg", "-hide_banner", "-codecs"],
                 capture_output=True,
@@ -180,7 +179,6 @@ class VideoEngine:
                 f"text_{abs(hash(text)) % 10000}.mp4"
             )
             
-            # FFmpeg command for text overlay
             cmd = [
                 "ffmpeg", "-y",
                 "-f", "lavfi", "-i", "color=c=black:s=1080x1920:d=10",
@@ -211,11 +209,60 @@ class VideoEngine:
                 f"transition_{transition_type}_{abs(hash(transition_type + str(duration))) % 10000}.mp4"
             )
             
-            # FFmpeg command for transition
             if transition_type == "crossfade":
                 cmd = [
                     "ffmpeg", "-y",
                     "-f", "lavfi", "-i", "color=c=black:s=1080x1920:d=1",
                     "-f", "lavfi", "-i", "color=c=white:s=1080x1920:d=1",
-                    "-filter_complex", 
-                    f"fade=t=in:st=0:d=0.5,fade=t=out:st={duration-0.
+                    "-filter_complex",
+                    f"fade=t=in:st=0:d=0.5,fade=t=out:st={duration-0.5}:d=0.5",
+                    "-c:v", "h264",
+                    "-t", str(duration),
+                    output_path
+                ]
+            else:
+                # Default to fade transition
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "lavfi", "-i", f"color=c=black:s=1080x1920:d={duration}",
+                    "-c:v", "h264",
+                    output_path
+                ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                logger.info(f"Transition created: {output_path}")
+                return output_path
+            else:
+                raise Exception(f"Transition creation failed: {result.stderr}")
+                
+        except Exception as e:
+            logger.error(f"Transition creation failed: {str(e)}")
+            raise
+
+# Example usage
+async def test_video_engine():
+    """Test the video engine"""
+    from types import SimpleNamespace
+    engine = VideoEngine()
+    
+    settings = SimpleNamespace(
+        platform="youtube-shorts",
+        resolution="1080x1920",
+        fps=30,
+        codec="h.264",
+        bit_rate="8M"
+    )
+    
+    video_clips = []
+    audio_path = "assets/audio/test.wav"
+    
+    try:
+        result = await engine.export_video(settings, video_clips, audio_path)
+        print(f"Exported video: {result}")
+    except Exception as e:
+        print(f"Expected failure (no audio file): {str(e)}")
+
+if __name__ == "__main__":
+    asyncio.run(test_video_engine())

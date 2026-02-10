@@ -247,6 +247,8 @@ async def test_audio_pipeline():
         voice_settings=voice_settings
     )
     
-    try:
-        result = await pipeline.generate_voiceover(request)
-        print(f"Generated voiceover: {result
+    result = await pipeline.generate_voiceover(request)
+    print(f"Generated voiceover: {result}")
+
+if __name__ == "__main__":
+    asyncio.run(test_audio_pipeline())

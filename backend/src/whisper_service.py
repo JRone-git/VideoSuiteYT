@@ -48,11 +48,9 @@ class WhisperService:
     ) -> Dict[str, Any]:
         """Transcribe audio to text with captions"""
         try:
-            # Load model if not already loaded
             if not self.model or self.model_name != model_size:
                 await self._load_model(model_size, use_gpu)
             
-            # Transcribe audio
             segments, info = self.model.transcribe(
                 audio_path,
                 language=language,
@@ -61,21 +59,18 @@ class WhisperService:
                 vad_parameters=dict(min_silence_duration_ms=500)
             )
             
-            # Collect segments
             full_text = ""
             segments_list = []
             
             for segment in segments:
                 segment_text = segment.text.strip()
                 full_text += segment_text + " "
-                
                 segments_list.append({
                     "start": segment.start,
                     "end": segment.end,
                     "text": segment_text
                 })
             
-            # Generate SRT format
             srt_content = self._segments_to_srt(segments_list)
             
             return {
@@ -94,28 +89,23 @@ class WhisperService:
     async def _load_model(self, model_size: str, use_gpu: bool):
         """Load Whisper model with memory management"""
         try:
-            # Memory-aware model loading
             if use_gpu and self._check_gpu():
                 try:
                     import torch
-                    # Check VRAM availability
                     vram_available = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                    
-                    # Adjust model based on available VRAM
                     if vram_available < 6:
-                        logger.warning("Low VRAM detected, using smaller model or CPU")
+                        logger.warning("Low VRAM, using CPU")
                         self.device = "cpu"
                     else:
                         self.device = "cuda"
                         self.compute_type = "float16"
-                except Exception as e:
-                    logger.warning(f"GPU check failed: {str(e)}, using CPU")
+                except Exception:
                     self.device = "cpu"
             else:
                 self.device = "cpu"
-                self.compute_type = "int8"  # Use quantized model for CPU
+                self.compute_type = "int8"
             
-            logger.info(f"Loading Whisper {model_size} model on {self.device}")
+            logger.info(f"Loading Whisper {model_size} on {self.device}")
             
             self.model = WhisperModel(
                 model_size,
@@ -125,7 +115,7 @@ class WhisperService:
             )
             
             self.model_name = model_size
-            logger.info(f"Whisper model loaded successfully on {self.device}")
+            logger.info(f"Whisper model loaded")
             
         except Exception as e:
             logger.error(f"Failed to load Whisper model: {str(e)}")
@@ -134,16 +124,11 @@ class WhisperService:
     def _segments_to_srt(self, segments: List[Dict]) -> str:
         """Convert segments to SRT format"""
         srt_content = ""
-        
         for i, segment in enumerate(segments, 1):
             start_time = self._format_timestamp(segment["start"])
             end_time = self._format_timestamp(segment["end"])
             text = segment["text"]
-            
-            srt_content += f"{i}\n"
-            srt_content += f"{start_time} --> {end_time}\n"
-            srt_content += f"{text}\n\n"
-        
+            srt_content += f"{i}\n{start_time} --> {end_time}\n{text}\n\n"
         return srt_content
     
     def _format_timestamp(self, seconds: float) -> str:
@@ -152,19 +137,13 @@ class WhisperService:
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
         ms = int((seconds % 1) * 1000)
-        
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
     
     async def burn_captions(
-        self, 
-        video_path: str, 
-        captions_path: str, 
-        output_path: str,
-        style: str = "minimal"
+        self, video_path: str, captions_path: str, output_path: str, style: str = "minimal"
     ) -> str:
         """Burn captions into video"""
         try:
-            # FFmpeg command for burning captions
             cmd = [
                 "ffmpeg", "-y",
                 "-i", video_path,
@@ -174,42 +153,33 @@ class WhisperService:
                 "-c:a", "copy",
                 output_path
             ]
-            
             result = subprocess.run(cmd, capture_output=True, text=True)
-            
             if result.returncode == 0:
-                logger.info(f"Captions burned successfully: {output_path}")
+                logger.info(f"Captions burned: {output_path}")
                 return output_path
             else:
                 raise Exception(f"Caption burning failed: {result.stderr}")
-                
         except Exception as e:
             logger.error(f"Caption burning failed: {str(e)}")
             raise
     
     async def detect_speaking_rate(self, audio_path: str) -> Dict[str, float]:
-        """Detect speaking rate and speech patterns"""
+        """Detect speaking rate"""
         try:
-            # Simple speaking rate estimation
             cmd = [
                 "ffprobe", "-v", "error",
                 "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1",
                 audio_path
             ]
-            
             result = subprocess.run(cmd, capture_output=True, text=True)
             duration = float(result.stdout.strip())
-            
-            # Estimate word count (assume ~150 words/minute for normal speech)
             estimated_words = duration * 150 / 60
-            
             return {
                 "duration_seconds": duration,
                 "estimated_words": estimated_words,
                 "speaking_rate_wpm": estimated_words / (duration / 60) if duration > 0 else 0
             }
-            
         except Exception as e:
             logger.error(f"Speaking rate detection failed: {str(e)}")
             return {"duration_seconds": 0, "estimated_words": 0, "speaking_rate_wpm": 0}
@@ -220,15 +190,19 @@ async def test_whisper_service():
     service = WhisperService()
     
     try:
-        # Create test audio file
         test_audio = "test_audio.wav"
         import numpy as np
         import soundfile as sf
         
-        # Generate 10 seconds of silent audio
         sample_rate = 16000
         duration = 10
         audio_data = np.zeros(int(sample_rate * duration), dtype=np.float32)
         sf.write(test_audio, audio_data, sample_rate)
         
         result = await service.transcribe(test_audio)
+        print(f"Transcription result: {result}")
+    except Exception as e:
+        print(f"Expected failure (no Whisper model): {str(e)}")
+
+if __name__ == "__main__":
+    asyncio.run(test_whisper_service())

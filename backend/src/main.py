@@ -8,6 +8,33 @@ import os
 import sys
 import asyncio
 import logging
+
+# CRITICAL: Add backend src directory to path FIRST, before any other imports
+# This must happen before any relative imports or the module won't be found
+_backend_src_dir = os.path.dirname(os.path.abspath(__file__))
+if _backend_src_dir not in sys.path:
+    sys.path.insert(0, _backend_src_dir)
+
+# Also check for parent directory (in case we're in backend/src/)
+_parent_dir = os.path.dirname(_backend_src_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
+
+# Check PYTHONPATH env var
+_pythonpath = os.environ.get('PYTHONPATH', '')
+if _pythonpath:
+    for p in _pythonpath.split(os.pathsep):
+        if p and p not in sys.path:
+            sys.path.insert(0, p)
+
+print(f"DEBUG: sys.path = {sys.path[:3]}...", file=sys.stderr)
+
+# Now safe to import local modules
+from ollama_client import OllamaClient
+from audio_pipeline import AudioPipeline
+from video_engine import VideoEngine
+from whisper_service import WhisperService
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -58,7 +85,7 @@ class ScriptGenerationRequest(BaseModel):
     target_duration_seconds: int = 45
     tone: str = "engaging"
     style: str = "conversational"
-    model_name: str = "llama3.1:8b-q4_K_M"
+    model_name: str = "llama3.2:latest"
 
 class ScriptRefinementRequest(BaseModel):
     script: str

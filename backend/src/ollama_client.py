@@ -17,7 +17,7 @@ class OllamaClient:
     def __init__(
         self, 
         base_url: str = "http://localhost:11434",
-        model_name: str = "llama3.1:8b-q4_K_M",
+        model_name: str = "llama3.2:latest",
         context_size: int = 4096
     ):
         self.base_url = base_url
