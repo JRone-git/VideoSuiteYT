@@ -49,6 +49,10 @@
       {
         "from": "../backend/src",
         "to": "backend/src"
+      },
+      {
+        "from": "../backend/dist",
+        "to": "backend"
       }
     ],
     "win": {
@@ -57,7 +61,8 @@
     },
     "linux": {
       "target": "AppImage",
-      "icon": "src/icons/icon.png"
+      "icon": "src/icons/icon.png",
+      "category": "Video"
     }
   }
 }

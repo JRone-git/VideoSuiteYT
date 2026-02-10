@@ -14,6 +14,7 @@ app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,Media
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -63,57 +64,98 @@ async function startBackend() {
     // Check if running in AppImage
     const isAppImage = process.resourcesPath.includes('.mount_');
     
-    let pythonCmd: string;
-    let backendSrcPath: string;
+    let backendExecutable: string;
     let backendCwd: string;
+    let useBundledBackend = false;
     
-    // Get user site-packages path for Python packages
-    const userSitePackages = path.join(process.env.HOME || '/home/jonne', '.local', 'lib', 'python3.12', 'site-packages');
+    // Check for bundled backend (PyInstaller executable)
+    const bundledBackendPath = path.join(process.resourcesPath, 'backend', 'pulse-backend');
+    const bundledBackendExe = path.join(bundledBackendPath, 'pulse-backend');
     
-    if (isAppImage) {
-      // In AppImage: use system python with path passed via env var
-      pythonCmd = '/usr/bin/python3';
-      backendSrcPath = path.join(process.resourcesPath, 'backend', 'src');
-      backendCwd = path.join(process.resourcesPath, 'backend');
-    } else {
-      // In dev mode: use the virtual environment
-      backendSrcPath = path.join(app.getAppPath(), '../backend/src');
-      backendCwd = path.join(app.getAppPath(), '../backend');
-      pythonCmd = path.join(app.getAppPath(), '../backend/venv/bin/python3');
+    if (isAppImage && process.platform === 'linux' && fs.existsSync(bundledBackendExe)) {
+      // Use bundled backend on Linux AppImage
+      backendExecutable = bundledBackendExe;
+      backendCwd = bundledBackendPath;
+      useBundledBackend = true;
+      console.log('Using bundled backend:', backendExecutable);
+    } else if (isAppImage && process.platform === 'win32') {
+      // Windows bundled backend
+      const windowsBackendExe = path.join(process.resourcesPath, 'backend', 'pulse-backend.exe');
+      if (fs.existsSync(windowsBackendExe)) {
+        backendExecutable = windowsBackendExe;
+        backendCwd = path.dirname(windowsBackendExe);
+        useBundledBackend = true;
+        console.log('Using bundled backend:', backendExecutable);
+      }
     }
     
-    console.log('Starting backend...');
-    console.log('Python:', pythonCmd);
-    console.log('Backend src:', backendSrcPath);
+    if (!useBundledBackend) {
+      // Fall back to Python-based backend
+      const { PythonShell } = require('python-shell');
+      
+      let pythonCmd: string;
+      let backendSrcPath: string;
+      
+      if (isAppImage) {
+        pythonCmd = '/usr/bin/python3';
+        backendSrcPath = path.join(process.resourcesPath, 'backend', 'src');
+      } else {
+        backendSrcPath = path.join(app.getAppPath(), '../backend/src');
+        pythonCmd = path.join(app.getAppPath(), '../backend/venv/bin/python3');
+      }
+      
+      console.log('Starting backend with Python...');
+      console.log('Python:', pythonCmd);
+      console.log('Backend src:', backendSrcPath);
+      
+      const env = {
+        ...process.env,
+        PYTHONPATH: backendSrcPath,
+        BACKEND_SRC_PATH: backendSrcPath
+      };
+      
+      const backendProcess = spawn(pythonCmd, [path.join(backendSrcPath, 'main.py')], {
+        detached: true,
+        stdio: 'pipe',
+        cwd: path.dirname(backendSrcPath),
+        env: env
+      });
+      
+      backendProcess.stdout?.on('data', (data) => {
+        console.log('Backend:', data.toString().trim());
+      });
+      
+      backendProcess.stderr?.on('data', (data) => {
+        console.error('Backend error:', data.toString().trim());
+      });
+      
+      backendProcess.unref();
+      console.log('Backend server started');
+    } else {
+      // Use bundled backend executable
+      console.log('Starting bundled backend...');
+      
+      const backendProcess = spawn(backendExecutable, [], {
+        detached: true,
+        stdio: 'pipe',
+        cwd: backendCwd,
+        env: process.env
+      });
+      
+      backendProcess.stdout?.on('data', (data) => {
+        console.log('Backend:', data.toString().trim());
+      });
+      
+      backendProcess.stderr?.on('data', (data) => {
+        console.error('Backend error:', data.toString().trim());
+      });
+      
+      backendProcess.unref();
+      console.log('Bundled backend started');
+    }
     
-    // Set PYTHONPATH and pass BACKEND_SRC_PATH for Python to use
-    const env = { 
-      ...process.env,
-      PYTHONPATH: `${backendSrcPath}:${userSitePackages}:${process.env.PYTHONPATH || ''}`,
-      BACKEND_SRC_PATH: backendSrcPath
-    };
-    
-    const backendProcess = spawn(pythonCmd, [path.join(backendSrcPath, 'main.py')], {
-      detached: true,
-      stdio: 'pipe',
-      cwd: backendCwd,
-      env: env
-    });
-    
-    // Capture output for debugging
-    backendProcess.stdout?.on('data', (data) => {
-      console.log('Backend:', data.toString().trim());
-    });
-    
-    backendProcess.stderr?.on('data', (data) => {
-      console.error('Backend error:', data.toString().trim());
-    });
-    
-    backendProcess.unref();
-    console.log('Backend server started');
-    
-    // Wait a bit and check if it's running
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait a bit for backend to start
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
   } catch (error) {
     console.error('Failed to start backend:', error);
